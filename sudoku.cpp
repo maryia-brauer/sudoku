@@ -1,204 +1,276 @@
-/wsp explain
 #include <iostream>
-#include <vector>
-#include <ctime>
 #include <cstdlib>
+#include <ctime>
+
 using namespace std;
 
-// класс для представления ячейки головоломки Судоку
-class Cell
-{
-public:
-    int value;  // значение ячейки
-    bool fixed; // флаг, указывающий, является ли ячейка неизменяемой
-    Cell()
-    {
-        value = 0;
-        fixed = false;
-    }
-};
+const int ROWS = 9; // количество строк
+const int COLS = 9; // колиесвто стлобцов
 
-class Sudoku
+void generatePuzzle(int puzzle[ROWS][COLS]);                       // генерирование пазла для игры
+void displayMenu();                                                // выводит меню
+void displayPuzzle(int puzzle[ROWS][COLS]);                        // выводит пазл
+bool isValid(int puzzle[ROWS][COLS], int row, int col, int value); // проверяет правильное ли значение (судоку правила)
+bool isComplete(int puzzle[ROWS][COLS]);                           // проверяет заполнен ли пазл
+void playGame(int puzzle[ROWS][COLS]);                             // процесс игры
+bool solveSudoku(int puzzle[ROWS][COLS]);                          // решение головоломки
+bool findEmptyCell(int puzzle[ROWS][COLS], int &row, int &col);    // находит пустые клетки
+
+int main() // основная функция
 {
-public:
-    Sudoku();     // конструктор класса
-    void print(); // метод для вывода головоломки на экран
-    void play();  // метод для запуска игры
-private:
-    vector<vector<Cell>> grid;                 // матрица, представляющая головоломку Судоку
-    void generateNew();                        // метод для генерации новой головоломки
-    bool isValid(int row, int col, int value); // метод для проверки корректности установки значения в ячейку
-    bool solve();                              // метод для решения головоломки
-};
-Sudoku::Sudoku()
-{
-    // создание пустой головоломки
-    grid.resize(9, vector<Cell>(9));
-    for (int i = 0; i < 9; i++)
+    int puzzle[ROWS][COLS];
+    bool quit = false;
+
+    srand(time(0));
+
+    while (!quit) // пока пользователь не выбрал покинуть игру
     {
-        for (int j = 0; j < 9; j++)
+        displayMenu();
+        int choice;    // переменная для управления меню
+        cin >> choice; // ввод переменной меню
+
+        switch (choice)
         {
-            grid[i][j] = Cell();
+        case 1: // если пользователь выбирает играть
+            generatePuzzle(puzzle);
+            playGame(puzzle);
+            break;
+        case 2:
+            quit = true; // если пользователь хочет покинуть игру
+            break;
+        default:
+            cout << "Неправильный ввод. Пожалуйста, введите 1 или 2." << endl; // проверка на правильный ввод
+        }
+    }
+
+    cout << "Спасибо за игру!" << endl;
+
+    return 0;
+}
+
+void generatePuzzle(int puzzle[ROWS][COLS])
+{
+    // Создает пустой пазл со всеми нулями
+    for (int row = 0; row < ROWS; row++)
+    {
+        for (int col = 0; col < COLS; col++)
+        {
+            puzzle[row][col] = 0;
+        }
+    }
+
+    // Заполняет диагональные ячейки случайными числами
+    for (int box = 0; box < 3; box++)
+    {
+        for (int cell = 0; cell < 3; cell++)
+        {
+            int row = box * 3 + cell;
+            int col = box * 3 + cell;
+            int value;
+            do
+            {
+                value = rand() % 9 + 1;
+            } while (!isValid(puzzle, row, col, value));
+            puzzle[row][col] = value;
+        }
+    }
+
+    // Решает головоломку, используя обратный поиск
+    solveSudoku(puzzle);
+
+    // Убирает несколько цифр, чтобы создать головоломку
+    int remainingCells = ROWS * COLS;
+    while (remainingCells > 20)
+    {
+        int row = rand() % ROWS;
+        int col = rand() % COLS;
+        if (puzzle[row][col] != 0)
+        {
+            puzzle[row][col] = 0;
+            remainingCells--;
         }
     }
 }
 
-// метод для генерации новой головоломки
-void Sudoku::generateNew()
+bool solveSudoku(int puzzle[ROWS][COLS])
 {
-    srand(time(NULL));
-    // заполнение первой строки случайными значениями
-    for (int j = 0; j < 9; j++)
+    int row, col;
+
+    // Если пустых ячеек нет, головоломка решена
+    if (!findEmptyCell(puzzle, row, col))
     {
-        int value = rand() % 9 + 1;
-        while (!isValid(0, j, value))
-        {
-            value = rand() % 9 + 1;
-        }
-        grid[0][j].value = value;
-        grid[0][j].fixed = true;
+        return true;
     }
-    // заполнение оставшихся строк случайными значениями
-    for (int i = 1; i < 9; i++)
+
+    // Пробует значение от 1 до 9
+    for (int value = 1; value <= 9; value++)
     {
-        for (int j = 0; j < 9; j++)
+        // Если значение правильное
+        if (isValid(puzzle, row, col, value))
         {
-            if (!grid[i][j].fixed)
+            // Делает ход
+            puzzle[row][col] = value;
+
+            // Рекурсия
+            if (solveSudoku(puzzle))
             {
-                int value = rand() % 9 + 1;
-                while (!isValid(i, j, value))
-                {
-                    value = rand() % 9 + 1;
-                }
-                grid[i][j].value = value;
+                return true;
+            }
+
+            // Если рекурсия завершилась неудачей, отмените ход
+            puzzle[row][col] = 0;
+        }
+    }
+
+    // Триггер обратного поиска
+    return false;
+}
+
+bool findEmptyCell(int puzzle[ROWS][COLS], int &row, int &col)
+{
+    for (row = 0; row < ROWS; row++)
+    {
+        for (col = 0; col < COLS; col++)
+        {
+            if (puzzle[row][col] == 0)
+            {
+                return true;
             }
         }
     }
+    return false;
 }
 
-// метод для вывода головоломки на экран
-void Sudoku::print()
+bool isValid(int puzzle[ROWS][COLS], int row, int col, int value)
 {
-    cout << "-------------------------" << endl;
-    for (int i = 0; i < 9; i++)
+    // Проверка на допустимость значения
+    if (value < 1 || value > 9)
+    {
+        return false;
+    }
+
+    // Проверка строки
+    for (int i = 0; i < COLS; i++)
+    {
+        if (puzzle[row][i] == value && i != col)
+        {
+            return false;
+        }
+    }
+
+    // Проверка столбца
+    for (int i = 0; i < ROWS; i++)
+    {
+        if (puzzle[i][col] == value && i != row)
+        {
+            return false;
+        }
+    }
+
+    // Проверка малого квадрата 3x3
+    int boxRow = row - row % 3;
+    int boxCol = col - col % 3;
+
+    for (int i = boxRow; i < boxRow + 3; i++)
+    {
+        for (int j = boxCol; j < boxCol + 3; j++)
+        {
+            if (puzzle[i][j] == value && i != row && j != col)
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+void displayMenu()
+{
+    cout << "Добро пожаловать в Судоку!" << endl;
+    cout << "Выберите:" << endl;
+    cout << "1. Начать новую игру" << endl;
+    cout << "2. Выйти" << endl;
+    cout << "Введите Ваш выбор: ";
+}
+
+void displayPuzzle(int puzzle[ROWS][COLS])
+{
+    cout << "+-------+-------+-------+" << endl;
+    for (int row = 0; row < ROWS; row++)
     {
         cout << "| ";
-        for (int j = 0; j < 9; j++)
+        for (int col = 0; col < COLS; col++)
         {
-            if (grid[i][j].value != 0)
+            if (puzzle[row][col] == 0)
             {
-                cout << grid[i][j].value << " ";
+                cout << ". ";
             }
             else
             {
-                cout << "  ";
+                cout << puzzle[row][col] << " ";
             }
-            if (j % 3 == 2)
+            if ((col + 1) % 3 == 0)
             {
                 cout << "| ";
             }
         }
         cout << endl;
-        if (i % 3 == 2)
+        if ((row + 1) % 3 == 0)
         {
-            cout << "-------------------------" << endl;
+            cout << "+-------+-------+-------+" << endl;
         }
     }
 }
 
-// метод для проверки корректности установки значения в ячейку
-bool Sudoku::isValid(int row, int col, int value)
+bool isComplete(int puzzle[ROWS][COLS])
 {
-    // проверка строки и столбца
-    for (int i = 0; i < 9; i++)
+    // Проверяем каждую ячейку
+    for (int row = 0; row < ROWS; row++)
     {
-        if (grid[row][i].value == value)
+        for (int col = 0; col < COLS; col++)
         {
-            return false;
-        }
-        if (grid[i][col].value == value)
-        {
-            return false;
-        }
-    }
-    // проверка квадрата 3x3
-    int r = row / 3 * 3;
-    int c = col / 3 * 3;
-    for (int i = r; i < r + 3; i++)
-    {
-        for (int j = c; j < c + 3; j++)
-        {
-            if (grid[i][j].value == value)
+            // Если находим пустую ячейку, головоломка не завершена
+            if (puzzle[row][col] == 0)
             {
                 return false;
             }
         }
     }
+    // Если все ячейки заполнены, головоломка завершена
     return true;
 }
 
-// метод для решения головоломки
-bool Sudoku::solve()
+void playGame(int puzzle[ROWS][COLS])
 {
-    for (int i = 0; i < 9; i++)
-    {
-        for (int j = 0; j < 9; j++)
-        {
-            if (grid[i][j].value == 0)
-            {
-                for (int k = 1; k <= 9; k++)
-                {
-                    if (isValid(i, j, k))
-                    {
-                        grid[i][j].value = k;
-                        if (solve())
-                        {
-                            return true;
-                        }
-                        grid[i][j].value = 0;
-                    }
-                }
-                return false;
-            }
-        }
-    }
-    return true;
-}
+    int row, col, value;
 
-// метод для запуска игры
-void Sudoku::play()
-{
-    generateNew();
-    print();
-    cout << "Enter row, column, and value (e.g. '3 5 4') or type 'solve' to see the solution." << endl;
-    string input;
-    while (true)
+    while (!isComplete(puzzle))
     {
-        getline(cin, input);
-        if (input == "solve")
+        // Вывод игрового поля
+        displayPuzzle(puzzle);
+
+        // Получение пользовательского ввода
+        cout << "Введите строку (1-9), столбец (1-9) и значение (1-9), разделяйте пробелом: ";
+        cin >> row >> col >> value;
+
+        // Проверка на допустимость ввода
+        if (row < 1 || row > 9 || col < 1 || col > 9 || value < 1 || value > 9)
         {
-            solve();
-            print();
-            break;
+            cout << "Неправильный ввод. Пожалуйста, введите значение от 1 до 9." << endl;
         }
-        int row = input[0] - '1';
-        int col = input[2] - '1';
-        int value = input[4] - '0';
-        if (isValid(row, col, value))
+        else if (!isValid(puzzle, row - 1, col - 1, value))
         {
-            grid[row][col].value = value;
-            print();
+            cout << "Неправильный ход. Пожалуйста, попробуйте снова." << endl;
         }
         else
         {
-            cout << "Invalid move." << endl;
+            // Присваивание значения клетке
+            puzzle[row - 1][col - 1] = value;
         }
     }
-}
 
-int main()
-{
-    Sudoku sudoku;
-    sudoku.play();
-    return 0;
+    // Вывод финального игрового поля
+    displayPuzzle(puzzle);
+    cout << "Поздравляем! Вы решили пазл!" << endl;
 }
